@@ -1,0 +1,365 @@
+---
+title: "Assignment_3"
+author: "Anshupriya Srivastava (netID: as996)"
+date: "9/25/2019"
+output: pdf_document
+---
+## Introduction
+
+The data for this exercise has been obtained from an Observational Study conducted by Child Health and Development Studies, a comprehensive study of all babies born between 1960 and 1967 at the Kaiser Foundation Hospital in Oakland, CA. The original dataset contains details of about 15,000 families but we have taken into account 869 male single births where the baby lived for at least 28 days. The mothers were interviewed quite early in their pregnancy to collect information on socioeconomic and demographic characteristics, with an indicator of whether the mother smoked during pregnancy. Our aim is to analyze this data and identify any associations between smoking and birth weight. By the doing so, we aim to answer the following questions:
+
+    * Do mothers who smoke tend to have higher chances of pre-term birth than mothers who do not 
+    smoke? What is a likely range for the odds ratio of pre-term birth for smokers and 
+    non-smokers?
+    * Is there any evidence that the odds ratio of pre-term birth for smokers and non-smokers 
+    differs by mother’s race? If so, characterize those differences.
+    * Are there other interesting associations with the odds of pre-term birth that are worth 
+    mentioning?
+    
+
+```{r libraries, echo = F, include = FALSE}
+library(ggplot2)
+library(Metrics)
+library(car)
+library(gridExtra)
+library(arm)
+library(e1071)
+library(caret)
+library(xtable)
+library(ISLR)
+library(pROC)
+library(kableExtra)
+library(knitr)
+library(broom)
+```
+
+## Data
+```{r smoking, echo = F,include = FALSE}
+smoking <- read.csv("~/Desktop/Duke University/Fall Semester 2019/Modeling and Representation of Data/Homework - due - 17th Sep/smoking.csv", header = T)
+smoking$premature <- with(smoking, ifelse(gestation < 270, 1, 0))
+#smoking$premature <- as.factor(smoking$premature)
+#smoking$premature <- as.numeric(smoking$premature)
+smoking$mrace <- as.factor(smoking$mrace)
+levels(smoking$mrace)<-list("white"=c(0,1,2,3,4,5), "mexican"=6, "black"=7, "asian"=8, "mix"=9)
+#smoking$inc <- as.factor(smoking$inc)
+#smoking$smoke <- as.factor(smoking$smoke)
+#smoking$med <- as.factor(smoking$med)
+#levels(smoking$med)<-list("<8"=0, "8-12"=1, "hs"=2, "hs+trade"=3, "hs+grad"=4, "grad" = 5, "trade"=c(6,7))
+#smoking$parity <- as.factor(smoking$parity)
+#smoking$BMI <- smoking$mpregwt * 703/smoking$mht**2
+```
+The data for this exercise was made available Sakai - filename “smoking.csv” has been used to answer the questions mentioned above. The list of variables present in the dataframe:
+
+        *id: (numeric): id number
+        *date: birth date where 1096 = January1, 1961
+        *gestation: length of gestation in days
+        *bwt.oz: birth weight in ounces
+        *parity: total number of previous pregnancies, including fetal deaths and still births
+        *mrace:mother’s race or ethnicity
+        *mage: mother’s age in years at termination of pregnancy
+        *med: mother’s education
+        *mht: mother’s height in inches
+        *mpregwt: mother’s pre-pregnancy weight in pounds
+        *inc: family yearly income in 2500 increments
+        *smoke: does mother smoke?
+        
+```{r echo = F, include = F}
+smp_size = floor(0.75*nrow(smoking))
+set.seed(123)
+train_ind = sample(seq_len(nrow(smoking)),size = smp_size)
+train = smoking[train_ind,]
+test = smoking[-train_ind,]
+table(test$premature)
+table(train$premature)
+```
+
+ 
+```{r include = FALSE, echo = FALSE}
+head(smoking)
+```
+
+After evaluating the structure of the data, we can see that apart from mother's race (mrace), all other variables are numeric. 
+The following **transformations** has been made:
+
+    *Race category 0 - 5 has been collapsed into one category for race = white.
+    *A new column Premature has been added where 1 indicates the birth of a premature baby 
+    and 0 indicates that the baby is not premature. This has been calculated using gestation
+    where if gestation < 270, Premture = 1 else Premature = 0.
+
+
+```{r echo = FALSE, include = F}
+x_1 <- table(smoking[,c("premature","smoke")])
+#table(smoking[,c("premature","smoke")])/sum(table(smoking[,c("premature","smoke")]))
+#actually, what we really want are conditional probabilities
+#we want to see how the probability of switching changes for different levels of assoc
+#that is, the probabilities for switching given each value of association
+apply(x_1/sum(x_1), 2, function(x) x/sum(x))
+```
+
+This assignment aims to understand the association between smoking and premature birth. The first analysis is performed on these two variables show that the conditional probability that the mother will have a premature child given she smokes is 0.165 or 16.5%.   
+
+The next set of analysis is between Premature and Categorical/Discrete variables. Using Chi-square test we can determine if they are associated. In this case since the discrete variables are treated as categorical variables. The p-values help in determining association. If the p-value is less than 0.5 we can say that there is a strong evidence against the null hypothesis that suggests that no relationship exists in the categorical variables in the population; they are independent. Table1 shows the associations of race, smoke, parity, education and income with Premature births. Even though the association between smoke and premature is False we proceed with using it in our model because that is the requirement of this exercise.
+
+```{r echo = FALSE}
+chi.sq.df <- data.frame("Variable" = c("mrace", "smoke", "parity", "med", "inc"), "p-value" = c("0.003561", "0.0694", "0.01125", "0.0005476", "0.9087"), "Is Associated" = c("Yes", "No", "Yes", "Yes", "No"))
+kable(chi.sq.df, caption = "Relationship of continuous variables with Premature Birth ") %>% kable_styling(bootstrap_options = "striped", fixed_thead = T)
+```
+
+```{r echo = FALSE, include = FALSE}
+#race_study <- smoke_study <- with(data = smoking, table(mrace, premature, dnn = c("Race", "Premature")))
+#smoke_study
+#table(smoking[,c("premature","mrace")])
+#apply(table(smoking[,c("premature","mrace")])/sum(table(smoking[,c("premature","mrace")])),
+ #     2,function(x) x/sum(x))
+#table(smoking[,c("premature","mrace")])/sum(table(smoking[,c("premature","mrace")]))
+chisq.test(table(smoking[,c("premature","mrace")]))
+```
+
+```{r echo = FALSE, include = FALSE}
+#smoke_study <- with(data = smoking, table(smoke, premature, dnn = c("Smoke", "Premature")))
+#smoke_study
+#table(smoking[,c("premature","smoke")])
+#apply(table(smoking[,c("premature","smoke")])/sum(table(smoking[,c("premature","smoke")])),
+#      2,function(x) x/sum(x))
+#table(smoking[,c("premature","smoke")])/sum(table(smoking[,c("premature","smoke")]))
+chisq.test(table(smoking[,c("premature","smoke")]))
+```
+```{r echo = FALSE, include = FALSE}
+#table(smoking[,c("premature","parity")])
+#apply(table(smoking[,c("premature","parity")])/sum(table(smoking[,c("premature","parity")])),
+#      2,function(x) x/sum(x))
+#table(smoking[,c("premature","smoke")])/sum(table(smoking[,c("premature","smoke")]))
+chisq.test(table(smoking[,c("premature","parity")]))
+```
+```{r echo = FALSE, include = FALSE}
+#table(smoking[,c("premature","med")])
+#apply(table(smoking[,c("premature","med")])/sum(table(smoking[,c("premature","med")])),
+#      2,function(x) x/sum(x))
+#table(smoking[,c("premature","smoke")])/sum(table(smoking[,c("premature","smoke")]))
+chisq.test(table(smoking[,c("premature","med")]))
+```
+
+```{r echo = FALSE, include = FALSE}
+#table(smoking[,c("premature","inc")])
+#apply(table(smoking[,c("premature","parity")])/sum(table(smoking[,c("premature","inc")])),
+#      2,function(x) x/sum(x))
+#table(smoking[,c("premature","smoke")])/sum(table(smoking[,c("premature","smoke")]))
+chisq.test(table(smoking[,c("premature","inc")]))
+```
+
+The graphs below show the associations between Premature and Continuous variables. Using a binned plot we can determine if they show any interesting relationship. Height, Weight and Age are continous variables.
+
+```{r binned plot for continuous variables, echo = FALSE, out.width = '70%', fig.align = 'center'}
+par(mfrow=c(3,1)) 
+binnedplot(y=smoking$premature,smoking$mage,xlab="Age",ylim=c(0,0.5),col.pts="navy",
+           ylab ="Premature?",main="Binned Age and Premature cases",col.int="white")
+binnedplot(y=smoking$premature,smoking$mht,xlab="Height",ylim=c(0,0.5),col.pts="navy",
+           ylab ="Premature?",main="Binned Height and Premature cases",col.int="white")
+binnedplot(y=smoking$premature,smoking$mpregwt,xlab="Weight",ylim=c(0,0.5),col.pts="navy",
+           ylab ="Premature?",main="Binned Weight and Premature cases",col.int="white")
+```
+
+The graphs with Age and Height follow an almost linear relationship. It seems like the data points in the third graph comparing mother’s pre-pregnancy weight and the probability of premature birth is showing a non-linaer trend and is concentrated towards one side, but that can be due to lesser number of data points. 
+
+The boxplots in Appendix B graphs for Premature birth relationship with age, weight and height based on whether smoke = 1 or 0 to explore interaction. Visually the relationship with height is showing a slight difference. Apart from that there is no other relationship of interest.
+
+## Model Selection
+
+For model selection the continuous variables are being centered. This helps in better interpretation of the intercept. Since none of these variables have a meaningful 0 value we use a centered value.
+
+```{r echo = FALSE, include = FALSE}
+smoking$mage_c <- smoking$mage - mean(smoking$mage)
+smoking$mht_c <- smoking$mht - mean(smoking$mht)
+smoking$mpregwt_c <- smoking$mpregwt - mean(smoking$mpregwt)
+```
+
+
+1. **Model_all**: The initial model is created using all the variables and then a model is chosen by AIC in a stepwise Alogrithm. 
+
+2. **Model_AIC**: The results of the stepwise algorithm show that variables race, weight, education and smoke are significant. The next model is created using the results of AIC. These variables are - *mrace*, *med*, *mpregwt_c* and *smoke*. 
+
+
+```{r echo = F, include = F} 
+model_AIC <- glm(premature ~ mrace + med + mpregwt_c + smoke , data = smoking, family = binomial)
+summary(model_AIC)
+p_AIC <- predict(model_AIC, type = "response")
+
+summary(p_AIC)
+Conf_mat_AIC <- confusionMatrix(as.factor(ifelse(fitted(model_AIC) >= mean(smoking$premature), "1", "0")),
+                            as.factor(smoking$premature),positive = "1")
+Conf_mat_AIC
+```
+
+
+3. **Model_Interaction**: The third and final model is used by *interacting smoke and race* along with *mrace*, *med*, *mpregwt_c* and *smoke*.
+
+```{r echo = FALSE}
+comparison_dataframe <- data.frame("Model Name" = c("model_all", "model_AIC", "model_Interaction"), "Accuracy" = c("60.07%", "60.3%", "59.15%"), "Sensitivity" = c("57.93%", "59.76%", "59.76%"), "Specificity" = c("60.57%", "60.43%", "59.01%"), "AUC" = c("63.8%", "63.1%", "63.8%"))
+```
+
+
+```{r echo = F}
+kable(comparison_dataframe, caption = "Model Comparison") %>% kable_styling(position = 'center')
+```
+
+Looking at **Table2** we can see that the second model [formula = premature ~ mrace + med + mpregwt_c + smoke] has a higher accuracy and specificity  (True Negative). The AUC and sensitivity (True Positive) values are comparable. Thus choosen model is model_AIC. [Please refer to Appendix B for the other models]
+
+```{r echo = FALSE, out.width = "50%"}
+invisible(roc(smoking$premature,fitted(model_AIC),plot=T,print.thres=mean(smoking$premature),legacy.axes=T,
+              print.auc =T,col="red3"))
+binnedplot(fitted(model_AIC),residuals(model_AIC,"resp"),xlab="Pred. probabilities",
+           col.int="red4",ylab="Avg. residuals",main="Binned residual plot",col.pts="navy")
+```
+
+The ROC Plot shows that the AUC value is 63.8%. It tells that model is capable of distinguishing between classes 63.8% of the times.
+
+The binned residual plot final model has no identifiable pattern. There is one data point that lies on the confidence interval boundary. There are three data points that lie outside the confidence interval.
+
+```{r echo = FALSE}
+stepwise_out = tidy(model_AIC)
+knitr::kable(
+stepwise_out,
+format = 'markdown',
+booktabs = T
+)
+```
+
+
+### Model Comparison using ANOVA.
+
+```{r echo = F}
+model_all <- glm(premature ~ parity + mrace + mage_c + med + mht_c + mpregwt_c + smoke + inc, data = smoking, family = binomial)
+model_Interaction <- glm(premature ~ mrace + med + mpregwt_c + smoke + smoke:mrace , data = smoking, family = binomial)
+```
+
+```{r echo = F, include = FALSE}
+anova(model_AIC, model_Interaction, test = "Chisq")
+```
+
+Using chi.square test in ANOVA a high p-value of 0.3028 shows that adding the an interaction does not affect the model. So, we proceed with model_AIC.
+
+
+## Conclusions
+
+### Do mothers who smoke tend to have higher chances of pre-term birth than mothers who do not smoke? What is a likely range for the odds ratio of pre-term birth for smokers and non-smokers?
+
+In the chosen model [model_AIC] the coefficient is 0.309. Thus the log odds that if Smoke = 1 increases the chance of having a premature baby by 30.9%. The increase in odds ratio is exp(0.309) which is equal 1.36. This implies that the chance of having a premature baby increases by a factor of 1.36 or 36% if smoke = 1.
+
+At 95% confidence level - (0.96, 1.95)
+
+### Is there any evidence that the odds ratio of pre-term birth for smokers and non-smokers differs by mother’s race? If so, characterize those differences.
+
+In the model model_Interaction we have used the Interaction between smoke and Race. Since the p-value is high we cannot determine any significant relationship between them. If we look at the regression output [Appendix A] we can see that race = Black and race = Asian are the two significant groups. Overall there seems to be no significance of adding the interaction term.
+Also, in comparison to the model_AIC the chisquare result was 0.3028. Thus the interaction terms are not significant.
+
+### Are there other interesting associations with the odds of pre-term birth that are worth mentioning?
+
+In the final model model_AIC, we are using **med**, **mpregwt** and **mrace** apart from **smoke**.
+
+1. For every level increase in education the odd's ratio decreases by $12.6$% keeping all the other variables constant. At 95% confidence level - (0.77, 0.99)
+
+2. For every unit increase in mpregwt the odd's ratio decreases by $1.1$% keeping all the other variables constant. At 95% confidence level - (0.98, 0.99)
+
+For race white is the baseline level. Also, the following results are exluding race = mexican and race = mix since they are not signicant.
+
+3. For every level change in mrace (white -> black) the odd's ratio increases by $103$% keeping all the other variables constant. At 95% confidence level - (1.33, 3.08)
+
+4. For every level change in mrace (white -> asian) the odd's ratio increases by $156$% keeping all the other variables constant. At 95% confidence level - (1.13, 5.56)
+
+## Limitations
+
+1. The dataset does not contain enough data points for some categories. For example our binned plot for weight shows concentration in one direction. This skewness causes discrepencies.
+
+2. We do not have enough data points for Premature = 1. Only 18% of the data represents Premature = 1.
+
+3. Race also does not contain enough datapoints for all races apart from the baseline group i.e. American. Thus the result of the interaction between Smoke and Race is not reliable.
+
+4. The chisquare test was giving a warning that the results might not be accurate due to lesser number of data points.
+
+# Appendix A
+
+## Regression Output
+
+### model_all
+
+```{r echo = FALSE, include = FALSE}
+summary(model_all)
+p_all <- predict(model_all, type = "response")
+
+summary(p_all)
+Conf_mat <- confusionMatrix(as.factor(ifelse(fitted(model_all) >= mean(smoking$premature), "1", "0")),
+                            as.factor(smoking$premature),positive = "1")
+Conf_mat
+step(glm(premature~1,data=smoking,family=binomial),scope=formula(model_all),direction="both",
+     trace=0,k = 2)
+```
+
+```{r echo = F}
+stepwise_out = tidy(model_all)
+knitr::kable(
+stepwise_out,
+format = 'markdown',
+booktabs = T
+)
+```
+
+### model_Interaction
+
+```{r echo = F, include = F}
+summary(model_Interaction)
+p_all <- predict(model_Interaction, type = "response")
+
+summary(p_all)
+Conf_mat_Interaction <- confusionMatrix(as.factor(ifelse(fitted(model_Interaction) >= mean(smoking$premature), "1", "0")),
+                            as.factor(smoking$premature),positive = "1")
+Conf_mat_Interaction
+```
+
+```{r echo = F}
+stepwise_out = tidy(model_Interaction)
+knitr::kable(
+stepwise_out,
+format = 'markdown',
+booktabs = T
+)
+```
+
+# Appendix B
+
+## EDA Plots to check for interactions of variables with smoking
+
+```{r echo = F, out.width="50%"}
+#par(mfrow=c(1,2))
+boxplot(mage~premature,data=smoking, subset=smoke==0, main = 'non smoking v/s age')
+boxplot(mage~premature,data=smoking, subset=smoke==1, main = 'smoking v/s age')
+```
+
+```{r echo = F, out.width="50%"}
+#par(mfrow=c(1,2))
+boxplot(mht~premature,data=smoking, subset=smoke==0, main = 'non smoking v/s height')
+boxplot(mht~premature,data=smoking, subset=smoke==1, main = 'smoking v/s height')
+```
+
+```{r echo = F, out.width="50%"}
+#par(mfrow=c(1,2))
+boxplot(mpregwt~premature,data=smoking, subset=smoke==0, main = 'non smoking v/s weight')
+boxplot(mpregwt~premature,data=smoking, subset=smoke==1, main = 'smoking v/s weight')
+```
+
+## ROC
+
+### Model_all
+
+```{r echo = FALSE, out.width="60%", fig.align = 'center'}
+invisible(roc(smoking$premature,fitted(model_all),plot=T,print.thres="best",legacy.axes=T,
+              print.auc =T,col="red3"))
+```
+
+
+### Model_Interaction
+
+```{r echo = F, out.width="60%", fig.align = 'center'}
+invisible(roc(smoking$premature,fitted(model_Interaction),plot=T,print.thres=mean(smoking$premature),legacy.axes=T,
+              print.auc =T,col="red3"))
+```
+
