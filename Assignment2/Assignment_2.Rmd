@@ -1,0 +1,252 @@
+title: "Assignment_2"
+author: "Anshupriya Srivastava (netID: as996)"
+date: "9/15/2019"
+output: pdf_document
+---
+# Question_1
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo = FALSE}
+library(ggplot2)
+library(moderndive)
+library(Metrics)
+library(car)
+```
+
+```{r echo=FALSE}
+OldFaithful <- read.csv("~/Desktop/Duke University/Fall Semester 2019/Modeling and Representation of Data/Homework - due - 4th Sep/OldFaithful.csv", header = T)
+```
+### Fit a regression of interval on duration and day (treated as a categorical/factor variable). Is there a significant difference in mean intervals for any of the days (compared to the first day)? Interpret the effects of controlling for the days (do so only for the days with significant effects, if any).
+
+## Fitting the Regression Line
+```{r}
+model_1 <- lm(data = OldFaithful, Interval ~ Duration + as.factor(Date))
+summary(model_1)
+```
+When we use categorical variable in a regression model we need a baseline for comparison. The baseline group here is Day = 1 (value = 32.8770). Date6 seems to have a significance difference of mean intervals compared to the first day. The slope offset for Date6 is 1.9918 and absolute t-value offset is also the highest 0.740. Date2 also seems to have a significant difference since the slope offset for Date2 is 1.3275 and absolute t-value offset is 0.489. T-value measures the difference in means of population distributions. The regression model shows that Date2 and Date6 have the highest values of difference in means. So, we can say that these dates have a significant difference of mean as compared to the Date1.
+
+Controlling for Day shows that there is a significance differnce at Date2 and Date6. These two dates have the higher impact on the final output as compared to the other dates. 
+
+### Perform an F-test to compare this model to your model for this data from the last homework. In context of the question, what can you conclude from the results of the F-test?
+
+We can use ANOVA to capture which model is better out of the two.
+
+```{r}
+model_2 <- lm(data = OldFaithful, Interval ~ Duration)
+anova(model_1, model_2)
+```
+
+We can see from the results that the P-Value is significantly large. This implies that adding an additional parameter does not improve the model. 
+
+### Using k-fold cross validation (with k=10), compare the average RMSE for this model and the average RMSE for your model from the last homework. Which model appears to have higher predictive accuracy based on the average RMSE values?
+
+```{r echo = FALSE}
+set.seed(10)
+Data <- OldFaithful[sample(nrow(OldFaithful)),]
+Data<- na.omit(Data)
+K <- 10
+RMSE <- matrix(0,nrow=10,ncol=1)
+kth_fold <- cut(seq(1,nrow(Data)),breaks=K,labels=FALSE)
+for(k in 1:10) {
+  test_index <- which(kth_fold==k)
+  train <- Data[-test_index,]
+  test <- Data[test_index,]
+  model <- lm(data = OldFaithful, Interval ~ Duration + as.factor(Date))
+  pred_test<- get_regression_points(model,newdata=test)
+  RMSE[k,] <- rmse(pred_test$Interval, pred_test$Interval_hat)
+}
+
+paste0("RMSE (new model): ", mean(RMSE))
+```
+
+```{r echo = FALSE}
+set.seed(10)
+Data <- OldFaithful[sample(nrow(OldFaithful)),]
+Data<- na.omit(Data)
+K <- 10
+RMSE <- matrix(0,nrow=10,ncol=1)
+kth_fold <- cut(seq(1,nrow(Data)),breaks=K,labels=FALSE)
+for(k in 1:10) {
+  test_index <- which(kth_fold==k)
+  train <- Data[-test_index,]
+  test <- Data[test_index,]
+  model <- lm(data = OldFaithful, Interval ~ Duration)
+  pred_test<- get_regression_points(model,newdata=test)
+  RMSE[k,] <- rmse(pred_test$Interval, pred_test$Interval_hat)
+}
+
+paste0("RMSE (old model): ", mean(RMSE))
+```
+The new model has a lower RMSE. But the difference in the RMSE between the two models is not significant. We cannot say one model is better than the other.
+
+# Question 2
+
+## Introduction
+
+The data for this exercise has been obtained from an Obsevational Study conducted by Child Health and Development Studies, a comprehensive study of all babies born between 1960 and 1967 at the Kaiser Foundation Hospital in Oakland, CA. The original dataset contains details of about 15,000 families but we have taken into account 869 male single births where the baby lived for at least 28 days. The mothers were interviewed quite early in their pregnancy to collect information on socioeconomic and demographic characteristics, with an indicator of whether the mother smoked during pregnancy. Our aim is to analyze this data and identfy any associations between smoking and birth weight. By the doing so, we aim to answer the following questions:
+
+    * Do mothers who smoke tend to give birth to babies with lower weights than mothers who do not smoke?
+    * What is a likely range for the difference in birth weights for smokers and non-smokers?
+    * Is there any evidence that the association between smoking and birth weight differs by mother’s race? If so, characterize those differences.
+    * Are there other interesting associations with birth weight that are worth mentioning?
+
+## Data
+
+```{r echo = F, results = 'hide'}
+library(ggplot2)
+library(gridExtra)
+library(moderndive)
+library(Metrics)
+```
+The data for this exercise was made available Sakai - filename “smoking.csv” has been used to answer the questions mentioned above. The list of variables present in the dataframe:
+
+        *id: (numeric): id number
+        *date: birth date where 1096 = January1, 1961
+        *gestation: length of gestation in days
+        *bwt.oz: birth weight in ounces
+        *parity: total number of previous pregnancies, including fetal deaths and still births
+        *mrace:mother’s race or ethnicity
+        *mage: mother’s age in years at termination of pregnancy
+        *med: mother’s education
+        *mht: mother’s height in inches
+        *mpregwt: mother’s pre-pregnancy weight in pounds
+        *inc: family yearly income in 2500 increments
+        *smoke: does mother smoke?
+
+#### Transformations:
+
+    *Race category 0 - 5 has been collapsed into one category for race = white.
+    *Mother's education has been renamed and categories 6-7 have been collapsed into 6,7 = trade school.
+      
+```{r echo = F, results = 'hide'}
+smoking <- read.csv("smoking.csv", header = T)
+smoking$mrace <- as.factor(smoking$mrace)
+levels(smoking$mrace)<-list("white"=c(0,1,2,3,4,5), "mexican"=6, "black"=7, "asian"=8, "mix"=9)
+smoking$inc <- as.factor(smoking$inc)
+smoking$smoke <- as.factor(smoking$smoke)
+smoking$med <- as.factor(smoking$med)
+levels(smoking$med)<-list("<8"=0, "8-12"=1, "hs"=2, "hs+trade"=3, "hs+grad"=4, "grad" = 5, "trade"=c(6,7))
+smoking$parity <- as.factor(smoking$parity)
+#summary(smoking)
+```
+Our **response variable is birth weight or bwt.oz**. I have used a histogram to view the distribution of this variable.
+```{r echo=FALSE, out.width='35%', fig.align='center'}
+p2_histogram <- ggplot(data = smoking, aes(bwt.oz)) + geom_histogram(col="black", fill="red", alpha = .2) + ggtitle("Frequency Distribution of Birth Weight") + theme(plot.title = element_text(hjust = 0.5))
+p2_histogram
+```
+The birthweight data looks **normally distributed** with a slight left skew.
+
+#### Hypothesis:
+$$H_0: The\;difference\;in\;the\;mean\;weight\;of\;the\;babies\;whose\;mothers\;smoke\;versus\;those\;who\;do\;not\;is\;0.$$
+$$H_1: The\;difference\;in\;the\;mean\;weight\;of\;the\;babies\;whose\;mothers\;smoke\;versus\;those\;who\;do\;not\;is \\
+\ greater\;than\;0.$$
+
+#### Relationships: 
+
+```{r echo = F, out.height='45%', out.width='50%', fig.align = 'center'}
+#keep <- c("bwt.oz", "parity", "mrace", "mage", "med", "mht", "mpregwt", "inc", "smoke")
+p1 <- ggplot(data = smoking, aes(x = parity, y = bwt.oz, fill = smoke, alpha = 0.2)) + geom_boxplot() + ggtitle("Parity vs Weight") + theme(plot.title = element_text(hjust = 0.5))
+p2 <- ggplot(data = smoking, aes(x = med, y = bwt.oz, fill = smoke, alpha = 0.2)) + geom_boxplot() + ggtitle("Education vs Weight") + theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) #+ coord_flip()
+grid.arrange(p1, p2, nrow = 2)
+```
+
+
+```{r echo = F}
+p3 <- ggplot(data = smoking, aes(x = mage, y = bwt.oz, col = smoke, alpha = 0.2)) + geom_point()+ geom_smooth(method = 'lm', col = 'red') + ggtitle('Age vs Weight') + theme(plot.title = element_text(hjust = 0.5))
+p5 <- ggplot(data = smoking, aes(x = mht, y = bwt.oz, col = smoke, alpha = 0.2)) + geom_point()+ geom_smooth(method = 'lm', col = 'red') + ggtitle('Mother Height vs Weight') + theme(plot.title = element_text(hjust = 0.5))
+p4 <- ggplot(data = smoking, aes(x = mrace, y = bwt.oz, fill = smoke, alpha = 0.2)) + geom_boxplot() + ggtitle("Race vs Weight") +  theme(plot.title = element_text(hjust = 0.5)) + coord_flip()
+p6 <- ggplot(data = smoking, aes(x = mpregwt, y = bwt.oz, col = smoke, alpha = 0.2)) + geom_point() + geom_smooth(method = 'lm', col = 'red') + ggtitle("Mother Weight vs Weight") +  theme(plot.title = element_text(hjust = 0.5))
+p7 <- ggplot(data = smoking, aes(x = inc, y = bwt.oz, fill = smoke, alpha = 0.2)) + geom_boxplot() + theme(plot.title = element_text(hjust = 0.5)) + ggtitle('Income vs Weight')
+p8 <- ggplot(data = smoking, aes(x = smoke, y = bwt.oz, fill = smoke, alpha = 0.2)) + geom_boxplot() + ggtitle('Smoke vs Weight') +  theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(p3, p5, p4, p6, p7, p8)
+```
+
+
+By studying the graphs above we can can determine the following about our dataset:
+
+**i. Parity vs Weight**: All categories show significant difference in mean weights. Women across all parity level who smoke seem have babies with weight lesser than the average. Based on this observation I will be using this in my model.
+
+**ii. Race vs Weight**: Women of mixed races seem to show a very significant difference of weights. Apart from mexicans all other races show variations in their median weight. Race will be a part of the model as well.
+
+**iii. Age vs Weight**: Age does not seem to be linearly related to the weight of the baby. I will be not be using Age in my model.
+
+**iv. Mother Height vs Height**: There seems to be a linear relationship between the two categories even though it seems to be heavily infuenced by the dispersed weights around it. Since this shows a linear relationship this will be a part of the model as well.
+
+**v. Education vs Weight**: Education does not show a very largr difference in weights. So, it will not be a part of my model.
+
+**vi. Mother Weight vs Weight**: The seems to be a linear relationship between the two categories even though it seems to be heavily infuenced by the dispersed weights around it specially towards one side. Since this shows a linear relationship this will be a part of the model as well.
+
+**vii. Income v/s Weight**: Doesn't seem to show any significant difference. I will not be using this in my model.
+
+**viii. Smoke v/s Weight**: The weights of babies whose mothers smoke seems to be lesser than those of don't. This variable will be a part of the model.
+      
+## Model
+
+**Do mothers who smoke tend to give birth to babies with lower weights than mothers who do not smoke?**
+
+
+Call: lm(formula = bwt.oz ~ smoke, data = smoking)
+```{r echo = FALSE, results = 'hide'}
+test_birthweight <- lm(data = smoking, bwt.oz ~ smoke)
+summary(test_birthweight)
+```
+
+At 95% confidence level, there is a significant difference (**p-value = 9.39e-14**) of the two weights. Here, the p-value is less than 0.05 so we can **reject the null hypothesis**. This gives evidence to support our assumption that mothers who smoke tend to give birth to babies with lower weights than mothers who do not smoke.
+
+```{r echo = FALSE}
+confint(test_birthweight)
+```
+
+**The maximum difference of the mean at 95% confidence interval can be as low as -11.34548 and as high as -6.674704.**
+
+```{r echo = FALSE}
+x1 <- get_regression_points(test_birthweight)
+r1 <- rmse(x1$bwt.oz, x1$bwt.oz_hat)
+paste0("RMSE: ", r1)
+```
+
+#### Impact of other variables on birth weight
+
+**Is there any evidence that the association between smoking and birth weight differs by mother’s race? If so, characterize those differences.**
+
+The "Race vs Weight" plot shows that women of mixed races seem to show a very significant difference of weights. Apart from mexicans all other races show variations in their median weight. Using a regression model with smoke and race as intercation variables we can quantify the relationship.
+
+```{r echo = F}
+model_race_smoke <- lm(data = smoking, bwt.oz ~ smoke + mrace + smoke:mrace)
+summary(model_race_smoke)
+```
+
+A **p-value (2.2e-16)** < 0.05 implies that we can reject the null hypothesis. The interation between smoke and race has increased R-squared value from 0.06095 to 0.09636 suggesting that this model fits the data better. 
+
+```{r echo = FALSE}
+x2 <- get_regression_points(model_race_smoke)
+r2 <- rmse(x2$bwt.oz, x2$bwt.oz_hat)
+paste0("RMSE: ", r2)
+```
+
+The RMSE value for this model is lesser than the previous model which agaian implies a better fit.
+
+**Are there other interesting associations with birth weight that are worth mentioning?**
+
+The variables smoke, mrace, parity, mht and mpregwt are *variables of interest*. Explanations for the same has been given above.
+
+```{r echo = F}
+model_more <- lm(data = smoking, bwt.oz ~ smoke + mrace + parity + mht + mpregwt)
+summary(model_more)
+```
+
+```{r echo = FALSE}
+x3 <- get_regression_points(model_more)
+r3 <- rmse(x3$bwt.oz, x3$bwt.oz_hat)
+paste0("RMSE: ", r3)
+```
+
+## Results
+
+Using **R-Squared** and **RMSE** values I have decided to use the **third model**. It is a multiple linear regression that uses smoke, mrace, parity, mht and mpregwt to predict the birthweight of newborn babies. I am using this model because it has the **highest R-squared** valiue of **0.1528**. Also, this model has the **lowest RMSE** which is **16.43**. The regression output for the model is available above and the RMSE calculation. 
+
+## Conclusion - Limitaion, takeaway, future work
+
+None of the variables show a strong linear relationship with the response variable. The linearity is heavily influenced by the datapoints that do not lie on the regression line. Hence using a simple linear regression model is not sufficient in this case. The model with the highest R-squared value (0.1528) is also not the best fit for this data because it only justifies 15% of the relationship which is quite low. This dataset requires a more complex model to explain the dependency of birthweight on the variables of interest.
