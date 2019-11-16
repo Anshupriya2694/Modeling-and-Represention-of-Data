@@ -1,0 +1,269 @@
+---
+title: "IDS702_Assignment1"
+author: "Anshupriya Srivastava (NetID:as996)"
+date: "9/4/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, results='hide'}
+#Adding required libraries
+library(ggplot2)
+library(readr)
+library(moderndive)
+library(dplyr)
+```
+
+#### Question_1
+```{r}
+#Reading the file
+
+OldFaithful <- read_csv("OldFaithful.csv")
+```
+```{r}
+glimpse(OldFaithful)
+```
+```{r}
+summary(OldFaithful)
+```
+#### Write down a regression model for predicting the interval between eruptions from the duration of the previous one. Make sure to use the right mathematical notation.
+
+$Interval = \beta_{0} + \beta_{1}*Duration$
+
+#### Fit the model to the data and interpret your results. In your answer, make sure you include the output from the regression model including the estimated intercept, slope, residual standard error, and R^2.
+```{r}
+fit_interval <- lm(Interval ~ Duration, data = OldFaithful)
+summary(fit_interval)
+
+##Intercept: 33.8282
+##Slope: 10.7410
+##Residual standard error: 6.683 on 105 degrees of freedom
+##Multiple R-squared:  0.7369,	Adjusted R-squared:  0.7344 
+```
+#### Also, include the 95% confidence interval for the slope, and explain what the interval reveals about the relationship between duration and waiting time.
+
+```{r}
+confint(fit_interval, level = 0.95)
+```
+##### A confidence level of 95% means that we are confident that 95% of the time the true value of the population parameter will lie with the confidence interval. We are trying to estimate the value of the interval between eruptions from the duration of the previous one. 
+##### *Based on 95% confidence level we can say that 95% of the time- 
+
+Confidence interval of the intercept is (29.343442, 38.31297)
+
+Confidence interval of the slope is (9.499061, 11.98288) 
+  
+Slope determines that with every one unit increase in the duration, the interval between eruptions will also increase by (9.499061, 11.98288).
+
+#### Describe in a few sentences whether or not you think the regression assumptions are plausible based on residual plots (you don’t need to include the plots).
+
+```{r}
+rp_OldFaithful <- get_regression_points(fit_interval)
+rp_OldFaithful
+ggplot(rp_OldFaithful, aes(x = Interval_hat, y = residual)) + geom_point() +
+  geom_hline(aes(yintercept = sum(residual), col = "red"))
+```
+Residual plot shows the residuals on the y-axis and the predicted values on the x-axis. When this plot shows a random pattern it supports a linear model. Residual is the difference between the observed and the calculated value. The sum of all residuals should be equal to zero. When the residual shows a pattern there is a high tendency that the sum might not add upto zero. Thus we know that a regression model may not be the best for the given data set. 
+
+I think that regression assumptions are plausible based on residual plots because the sum of the residuals is roughly equal to 0. This indicates a good fit.
+
+#### Construct 95% prediction intervals for the waiting time until the next eruption if the duration of the previous one was 2 minutes, 2.5 minutes, 3 minutes, 3.5 minutes and 4 minutes. Present your answer as a single plot.
+
+```{r}
+predict_df <- data.frame("Duration" = c(2, 2.5, 3, 3.5, 4))
+pred_interval <- predict(fit_interval, newdata=predict_df, interval="prediction",
+                         level = 0.95)
+pred_interval
+```
+
+```{r}
+new_df = cbind(predict_df, pred_interval)
+#new_df
+
+ggplot(new_df, aes(x = Duration, y = fit)) + geom_point() +
+  geom_line(aes(y=lwr), color = "red", linetype = "dashed")+
+  geom_line(aes(y=upr), color = "red", linetype = "dashed")+
+  geom_smooth(method=lm, se=TRUE) + labs(y = "Intervals") + 
+  ggtitle("Predicting interval between eruptions") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+``` 
+
+#### Question_2
+
+```{r}
+Respiratory <- read_csv("Respiratory.csv")
+```
+
+```{r}
+summary(Respiratory)
+```
+
+#### Analyze the data and include a useful plot that a physician could use to assess a normal range of respiratory rate for children of any age between 0 and 3.
+
+```{r}
+Respiratory["Rate_log10"] = log10(Respiratory$Rate)
+
+respiratory_age = Respiratory[Respiratory$Age > 0 & Respiratory$Age < 3,]
+hist(respiratory_age$Rate, xlab = "Rate", main = "Range of respiratory rate for children of any age between 0 and 3")
+```
+
+The following graph shows that the range of respiratory rate for children of any age between 0 and 3 shows a slight skew.
+
+#### Include the output of the regression that predicts respiratory rates from age. Also, is there enough evidence that the model assumptions are reasonable for this data? You should consider transformations (think log transformations etc) for both variables if you think the original relationship is nonlinear.
+
+```{r}
+fit_respiratory = lm(Rate_log10~Age, data = Respiratory)
+summary(fit_respiratory)
+```
+
+##### There are three things we can use to evaluate model fit:
+1. R-Squared: The value of R-squared ranges from 0 to 1. 0 indicates that the proposed model is not a good fit whereas 1 indicates a perfect fit. 
+Our model has R-squared: 0.5201 and Adjusted R-squared:  0.5193.
+We can say that age has a moderate effect on Rate.
+2. F-Test: The result of an F-test help in determining whether or not we accept our null hypothesis.
+Our model is rejecting the null hypothesis which suggests that there can be a relationship between rate and age.
+3. Residual Standard Error: Residual Standard Error helps determine how close the observed points are to the predicted values. 
+The value for our model is 0.0853 which is very low.
+
+All these factors show a good fit.
+```{r}
+rp <- get_regression_points(fit_respiratory)
+ggplot(data = rp, aes(x = Rate_log10_hat, y = residual)) + geom_point() + geom_hline(aes(yintercept = sum(residual), col = "red"))
+```
+Apart from R-squared, F-Test and RMSE a residual plot is also useful to identify if our model fits the data well. In this case, we can see that the sum of errors is roughly centered around 0. So, the model is a good fit.
+
+
+#### Demonstrate the usefulness of the model by providing 95% prediction intervals for the rate for three individual children: a 1 month old, an 18 months old, and a 29 months old.
+
+```{r}
+#Assuming every month has 30 days
+age_1 = log10(1 * 30) 
+age_2 = log10(18 * 30) 
+age_3 = log10(29 * 30)
+rate_predict_df <- data.frame("Age" = c(age_1, age_2, age_3 ))
+
+rate_pred_interval <- predict(fit_respiratory, 
+                      newdata=rate_predict_df, interval="prediction", 
+                      level = 0.95)
+rate_pred_interval
+```
+
+```{r}
+new_respiratory_df = cbind(rate_predict_df, rate_pred_interval)
+new_respiratory_df
+
+ggplot(new_respiratory_df, aes(x = Age, y = fit)) + geom_point() +
+  geom_line(aes(y=lwr), color = "red", linetype = "dashed") +
+  geom_line(aes(y=upr), color = "red", linetype = "dashed") +
+  geom_smooth(method=lm, se=TRUE) + labs(y = "Rate") + 
+  ggtitle("Rate v/s Age diagnostic indicator of respiratory infection in children") + 
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+``` 
+
+
+#### Question_3
+
+```{r}
+Elections <- read_csv("Elections.csv")
+```
+```{r}
+options(scipen = 999)
+
+palm_beach_county <- subset(Elections, County == "Palm Beach")
+
+ggplot(data = Elections, aes(x = Bush2000, y = Buchanan2000)) + 
+    geom_point() +
+    geom_point(data = palm_beach_county , colour="red") + 
+    geom_text(data = palm_beach_county, label="Palm Beach", vjust=1, size = 2) +
+    stat_smooth(method = lm)
+```
+Buchanan has generally recieved smaller number of votes. Most of the data points are concentrated within the range of 0 to 1000 for him. Palm Beach is the only county where he seems to have recieved more than 3000 votes. There is a chance that he recieved more than the expected number of votes in Palm Beach County.
+
+#### Analyze the data without Palm Beach County results to obtain an equation for predicting Buchanan votes from Bush votes. You should consider transformations (think log transformations etc) for both variables if you think the original relationship is nonlinear.
+
+```{r}
+Elections_new = Elections[-c(67),]
+Elections_new["Buchanan2000_log10"] = log10(Elections_new$Buchanan2000)
+Elections_new["Bush2000_log10"] = log10(Elections_new$Bush2000)
+
+Elections_new["Buchanan2000_log10"] = log10(Elections_new$Buchanan2000)
+```
+
+```{r}
+ggplot(data = Elections_new, aes(x = Bush2000_log10, y = Buchanan2000_log10)) + 
+    geom_point() + stat_smooth(method = lm) + labs(x = "Bush2000", y = "Buchanan2000")
+```
+##### Equation for predicting Buchanan's votes from Bush's votes - 
+
+$Buchanan2000 = \beta_0 + \beta_1 * Bush2000$ [Assuming all values in base 10]
+
+```{r}
+
+fit_votes = lm(Buchanan2000_log10~Bush2000_log10, data = Elections_new)
+
+```
+
+#### Include the output from the final regression model that you used, as well as evidence that the model fits the assumptions reasonably well.
+
+```{r}
+summary(fit_votes)
+```
+
+##### There are three things we can use to evaluate model fit:
+1. R-Squared: The value of R-squared ranges from 0 to 1. 0 indicates that the proposed model is not a good fit whereas 1 indicates a perfect fit. 
+Our model has R-squared: 0.8658 and Adjusted R-squared:  0.8637.
+We can say that Bush's votes have a high effect on Buchanan's votes.
+2. F-Test: The result of an F-test help in determining whether or not we accept our null hypothesis.
+Our model is rejecting the null hypothesis which indicates a relationship between the votes recieved by the two candidates.
+3. Residual Standard Error: Residual Standard Error helps determine how close the observed points are to the predicted values. 
+The value for our model is 0.1823 which is quite low.
+
+```{r}
+
+#rp <- get_regression_points(fit_votes)
+
+par(mfrow = c(2, 2))
+plot(fit_votes)
+
+```
+1. Residual v/s Fitted: Shows Linearity
+2. Normal Q-Q: Shows that it's normal
+3. RMSE and Fitted values: It's roughly centered around 0.
+4. Leverage: Three points 7, 22, 39 have a very high leverage.
+
+Apart from R-squared, F-Test and RMSE a residual plot is also useful to identify if our model fits the data well. In this case, we can see that the sum of errors is roughly centered around 0. So, the model is a good fit.
+
+#### Obtain a 95% prediction interval for the number of Buchanan votes in Palm Beach from this result, assuming the relationship is the same in this county as in the others. If it is assumed that Buchanan’s actual count contains a number of votes intended for Gore, what can be said about the likely size of this number from the prediction interval?
+
+```{r}
+Bush_val = log10(152846)
+
+predict_vote_df <- data.frame("Bush2000_log10" = Bush_val)
+
+pred_vote_interval <- predict(fit_votes, newdata=predict_vote_df, interval="prediction", level = 0.95)
+
+pred_vote_interval
+
+```
+
+```{r}
+
+fit_value = 2.772598
+Buchanan_true_predicted_val = 10^2.772598
+Buchanan_range_min = 10^2.399328
+Buchanan_range_max = 10^3.145869
+
+paste0("Buchanan Range at 95% confidence level: ", "(", Buchanan_range_min, ", ", 
+       Buchanan_range_max, ")")
+
+paste0("Buchanan_true_predicted_val at 95% confidence level: ", Buchanan_true_predicted_val)
+```
+
+#### By using a linear model we have concluded that Buchanan received around 592 votes at a 95% confidence level. We can use the values calcualated for Buchanan and create an assumption for Gore.
+If and only if the additional votes were meant for Gore, he should ideally receive at least 251 votes and at most 1399 more votes than he actually received.
+
+
