@@ -250,3 +250,8 @@ Using **R-Squared** and **RMSE** values I have decided to use the **third model*
 ## Conclusion - Limitaion, takeaway, future work
 
 None of the variables show a strong linear relationship with the response variable. The linearity is heavily influenced by the datapoints that do not lie on the regression line. Hence using a simple linear regression model is not sufficient in this case. The model with the highest R-squared value (0.1528) is also not the best fit for this data because it only justifies 15% of the relationship which is quite low. This dataset requires a more complex model to explain the dependency of birthweight on the variables of interest.
+
+
+
+
+
