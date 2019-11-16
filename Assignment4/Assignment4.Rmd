@@ -1,0 +1,268 @@
+---
+title: "Assignment 4"
+author: "Anshupriya Srivastava"
+date: "11/11/2019"
+output: pdf_document
+---
+
+## Missing Data Mechanics
+
+The given dataset contains the diameters and age of 20 trees. A dataset is created with 30% of the age values missing completely at random leaving all other values intact. The following command is used to create missing values -
+
+```{r echo = F, results = 'hide', include = F}
+library(mice)
+library(dplyr)
+library(kableExtra)
+```
+
+```{r echo = F}
+treeage = read.csv("treeage.txt", header = T)
+```
+
+
+```{r}
+set.seed(123)
+ind <- floor(runif(6, 1, 20))
+treeage$age[ind] <- NA
+```
+
+
+```{r echo = F, results = 'hide',include = F}
+treeage_comp <- read.csv("treeage.txt", header = T)
+md.pattern(treeage)
+```
+
+50 imputated datasets are created using the method "norm". The seed has been set to 100. The plot showing the imputed values and observed values is shown below.
+
+```{r echo = F, out.width = '50%', fig.align = 'center'}
+treeage_imp <- mice(treeage, m=50, defaultMethod=c("norm","logreg","polyreg","polr"),print=F, set.seed(100))
+
+stripplot(treeage_imp, data = age, col=c("blue","orange"),pch=c(1,20))
+```
+
+The shape and distribution of the imputed and observed data points look quite similar. It can be assumed that the generated values can be used in model generation. An xyplot showing the relationship between the age as a function of diameter further evalutes these imputations.
+
+```{r echo = F, out.width = '50%', fig.align = 'center'}
+xyplot(treeage_imp, age ~ diameter | .imp,pch=c(1,20),cex = 1.4,col=c("blue","orange"), alpha = 0.8)
+```
+
+The scatterplot show a positive linear relationship between age and diameter. By examining all 50 plots, it seems like plots - 12 and 38 have the closest relationship with the observed points. Further evalutions will be performed on there plots. Scatterplots of these plots are shown below. 
+
+```{r echo = F, out.width = '50%', fig.align = 'center'}
+xyplot(treeage_imp, age ~ diameter | .imp,pch=c(1,20),cex = 1.4,col=c("blue","orange"), alpha = 0.8)[c(12, 38)]
+```
+
+```{r echo = F}
+d12 <- complete(treeage_imp, 12)
+#d1
+```
+
+```{r echo = F}
+d38 <- complete(treeage_imp, 38)
+#d24
+```
+
+The density plots of the selected impuations are compared to original dataset. 
+
+```{r echo = F, out.height = '20%', fig.align = 'center'}
+dense_age<-density(treeage_comp$age)
+plot(dense_age,col="black",main= "comparison of density plots of tree age from different datasets")
+lines(density(d12$age),col="red")
+lines(density(d38$age),col="blue")
+```
+It can be observed that age is normally distributed. The black line shows the distribution of the original dataset. Red and blue line shows the distribution of the imputed dataset selected in this analysis. The selected dataset seem to show a similar distribution. Dataset 12 seems more appropriate so a linear model - 
+
+$$ age = \beta_0 + \beta_1 * diameter $$
+is used to fit the dataset.
+
+
+```{r echo = F, out.width = '80%', fig.align = 'center'}
+model12 <- lm(age ~ diameter, data = d12)
+#summary(model12)
+par(mfrow = c(2,2))
+plot(model12)
+```
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, fig.align = 'center'}
+knitr::kable(
+broom::tidy(model12),
+format = 'markdown',
+booktabs = T
+)%>%   kable_styling(full_width = F, latex_options = "hold_position") 
+```
+
+Using the residual plots and summary plots we can infer the following:
+
+* **Linearity**: There seems to be no evident pattern in the residual plot. This indicates that the model is meeting assumption linearity.
+
+* **Independence and Equal Variance**: Since the residual versus fitted plot indicates no evident conical pattern (spread out or converge) there is no indication of heteroskedasticity in the dataset or the model.
+
+* **Normality**: The Q-Q plot is used to interpret Normality. The relationship is approximately linear with the exception of three data points.
+
+* **Leverage Plot**: The points are well inside the curves. No point has leverage on the overall dataset. 
+
+The model using the 12th dataset suggestes that the age of the tree when diameter is zero is a negative value of 23.339. The coefficient of the diameter is 13.992 which suggests that a unit increase in the diameter can increase the age by 13.992. The R-squared value for this model is 75.1% which indicates that 75% of the variance in age can be explained by the diameter. The model validates the **positive relationship** between age and diameter. Using multiple imputation inferences by combining the rule.
+
+
+```{r echo = F,results = 'hide'}
+fit.mi = with(data = treeage_imp, exp = lm(age ~ diameter))
+combFit = pool(fit.mi) 
+round(summary(combFit),2)
+pool.r.squared(fit.mi)
+```
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, fig.align = 'center', out.width = '80%'}
+knitr::kable(
+summary(combFit),
+format = 'markdown',
+booktabs = T
+)%>%   kable_styling(full_width = F, latex_options = "hold_position") 
+```
+
+The pooled results suggest that the base value of age is -32.23 (when diameter = 0). The coefficient of the diameter is 14.75 which suggests that a unit increase in the diameter can increase the age by 14.75. This observation is quite close to one made using the 12th dataset. Also, the diameter is significant in estimating the value of age.
+
+
+## Multiple Imputations In Nhanes Data
+
+
+```{r echo = FALSE, include = F, results = 'hide'}
+nhanes<- read.csv("nhanes.csv",na.strings = '.')
+#summary(nhanes)
+#str(nhanes)
+colSums(is.na(nhanes))
+
+nhanes$riagendr <- as.factor(nhanes$riagendr)
+nhanes$ridreth2 <- as.factor(nhanes$ridreth2)
+nhanes$dmdeduc <- as.factor(nhanes$dmdeduc)
+nhanes$indfminc <- as.factor(nhanes$indfminc)
+```
+
+The following variables contain missing values - 
+
+    *age            *bmxbmi
+    *bmxtri         *dmdeduc
+    *bmxwaist       *bmxarml
+    *bmxthicr       *indfminc
+    *bmxwt
+
+The dataset also contains variables which are factor with 2 or more levels. Thus for this analysis pmm or predictive mean matching will be used as the imputation technique. Also, the variables - "sdmvstra","sdmvpsu","ridageyr","wtmec2yr" are dropped from this analysis. 
+
+```{r echo = FALSE, include = F, results = 'hide'}
+drop <- c("sdmvstra","sdmvpsu","ridageyr","wtmec2yr")
+nhanes_df = nhanes[,!(names(nhanes) %in% drop)]
+nhanes_imp <- mice(nhanes_df,m=10,defaultMethod=c("pmm","logreg","polyreg","polr"), print=F, seed = 50)
+```
+
+
+10 imputated datasets are created. The density plots of the datasets are shown below.
+
+```{r echo = FALSE, out.width = '60%', fig.align = 'center'}
+densityplot(nhanes_imp)
+```
+
+The density plot of the imputed values for age, bmsxarml are fairly similar to the observed. For bmxwt, though the shape is similar, there is difference in kurtosis. There seems to be some distortion for other variables like bmxbmi, there seems to be a certain amount of bias and the distribution is not very similar to the observed value. 
+
+The scatterplot of bmxbmi (BMI measurement) by age and bmxbmi by riagendr (gender) is observed below.
+
+```{r echo = FALSE}
+p1 = xyplot(nhanes_imp, bmxbmi ~ age | .imp,pch=c(1,20),cex = 1.4,col=c("blue","orange"), alpha = 0.5)
+p2 = xyplot(nhanes_imp, bmxbmi ~ riagendr | .imp,pch=c(1,20),cex = 1.4,col=c("blue","orange"), alpha = 0.5)
+```
+
+```{r echo = FALSE, out.height = '25%', fig.align = 'center'}
+gridExtra::grid.arrange(p1, p2, nrow = 1)
+```
+
+From the above graphs the 2nd and 8th imputed dataset seems like a good fit.
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+d2_nhanes<-complete(nhanes_imp, 2)
+d8_nhanes<-complete(nhanes_imp, 8)
+```
+
+Comparing the density plots for the selected the datasets - 
+
+```{r echo = FALSE, out.width='40%',fig.align="center"}
+dense_bmi<-density(nhanes$bmxbmi,na.rm=TRUE)
+plot(dense_age,col="black",main= "comparison of density plots of bmi from different datasets")
+
+lines(density(d2_nhanes$bmxbmi),col="blue")
+lines(density(d8_nhanes$bmxbmi),col="red")
+```
+
+The imputated dataset (blue and red) seem to have similar distrubution. But the distribution is heavily right skewed as compared to normal distribution of the bmxbmi from the original dataset.
+
+
+```{r echo = FALSE}
+p3 = xyplot(nhanes_imp, bmxbmi ~ age | .imp,pch=c(1,20),cex = 1.4,col=c("blue","orange"), alpha = 0.5)[c(2,8)]
+```
+
+
+```{r echo = FALSE}
+p4 = xyplot(nhanes_imp, bmxbmi ~ dmdeduc | .imp,pch=c(1,20),cex = 1.4,col=c("blue","orange"), alpha = 0.5)[c(2,8)]
+```
+
+```{r echo = FALSE, out.height = '25%', fig.align = 'center'}
+gridExtra::grid.arrange(p3, p4, nrow = 1)
+```
+
+The impuated values seem quite similar to the original values as can be seen from the scatterplot above. This is can quantified by using the following model - 
+
+$$ bmxbmi = \beta_0 + \beta_1 * age + \beta_2 * riagender + \beta_3 * ridreth2 + \beta_4 * indfminc + \beta_5 * dmdeduc + \beta_6 * bmxwt$$
+
+For this analysis the 2nd imputed dataset is used. Since, 
+A stepwise AIC shows that the above variables are significant. So, the next set of evalutions will be conducted on this model.
+
+```{r echo = FALSE, results = 'hide', include = F}
+bmi_model_1 <- lm(bmxbmi ~ age + riagendr + ridreth2+ indfminc + dmdeduc, data = d2_nhanes)
+step(bmi_model_1, k = 2)
+summary(bmi_model_1)
+```
+```{r echo=FALSE, warning=FALSE,message=FALSE, fig.align = 'center'}
+knitr::kable(
+broom::tidy(bmi_model_1),
+format = 'markdown',
+booktabs = T
+)%>%   kable_styling(full_width = F, latex_options = "hold_position") 
+```
+
+The model shows that age is a significant variable. Along with age, dmededuc (education), weight, race (Mexican American and Other Hispanic), gender and annual income levels (USD 45,000 to USD 54,999, USD 65,000 to USD 74,999 and USD 75,000 and Over) are also significant.
+
+The model using the 2nd dataset suggestes that the bmi is 10.605954 at baseline where age = 0, gender = Male, race = Non-Hispanic white, education = Less than high school, income = USD 0 to USD 4,999 and weight = 0. The coefficient of the age is -0.007645 which suggests that a unit increase in the age can decrease the bmi by -0.007645. When gender = Female, the bmi increases by 2.118355. Education however shows a very interesting relationship with Bmi. At baseline, when education is less than high school, if there is a increase to level 2 (High school diploma (including GED) and level 3 (More than high school) the bmi reduces by -0.424531 and -0.668238 respectively. But in case a certain individual is in level 7 (they refused to answer this question) or level 9 (they don't know their level education) the bmi is higher by 2.548862 and 1.831755 respectively. The R-squared value is 81.16% which indicates that approximately 81% of the variance in bmi can be explained by this model.
+
+```{r echo = F, out.width = '80%', fig.align = 'center'}
+par(mfrow = c(2, 2))
+plot(bmi_model_1)
+```
+
+Using the residual plots and summary plots we can infer the following:
+
+* **Linearity**: There seems to be a curved pattern in the residual plot. This indicates that the model is not meeting the assumption of linearity.
+
+* **Independence and Equal Variance**: Since the residual versus fitted plot indicates a evident pattern there is an indication of heteroskedasticity in the dataset or the model. This assumption is not met.
+
+* **Normality**: The Q-Q plot is used to interpret Normality. The relationship is approximately linear with the exception of a few data points.
+
+* **Leverage Plot**: The points are well inside the cooks. However, the points seem to be accumalated on one left side of the graph with the exception of a few points towards the right.
+
+Thus, it is evident that linear model is not a good fit for this model. 
+
+Using multiple imputation inferences by combining the rule.
+
+```{r echo = F,results = 'hide'}
+fit.mi.nhanes = with(data = nhanes_imp, exp = lm(bmxbmi ~ age + riagendr + ridreth2+ indfminc + dmdeduc + bmxwt))
+combFit.nhanes = pool(fit.mi.nhanes) 
+#x = round(summary(combFit.nhanes), 2)
+pool.r.squared(fit.mi.nhanes)
+```
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, fig.align = 'center', out.width = '80%'}
+knitr::kable(
+summary(combFit.nhanes),
+format = 'markdown',
+booktabs = T
+)%>%   kable_styling(full_width = F, latex_options = "hold_position") 
+```
+
+The pooled results suggest that the base value of bmi is 10.57 (at baseline of age = 0, gender = Male, race = Non-Hispanic white, education = Less than high school, income = USD 0 to USD 4,999 and weight = 0.). The coefficient of age is -0.01 which suggests that a unit increase in age can decrease the bmi by -0.01. In case of gender, it seems that when gender is female the bmi increaes by 2.13. These observation is quite close to one made using the 2nd dataset. 
+
